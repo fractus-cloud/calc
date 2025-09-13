@@ -193,6 +193,9 @@ export default function SubnetsPage() {
   const [isComputing, setIsComputing] = createSignal(false);
   const [visibleRows, setVisibleRows] = createSignal<ReturnType<typeof computeVisibleRows>>([]);
   const [lastKey, setLastKey] = createSignal('');
+  // Track whether we've successfully computed at least once for the current root/maxMask pair
+  const [hasComputedOnce, setHasComputedOnce] = createSignal(false);
+  const [rootMaskKey, setRootMaskKey] = createSignal('');
   // Heuristic threshold: if potential row count (2^(maxMask-rootMask)) exceeds 4096, we defer computation allowing spinner to paint.
   createEffect(() => {
     const root = rootSubnet();
@@ -200,8 +203,14 @@ export default function SubnetsPage() {
     const key = [root.cidr, maxMask(), Array.from(expanded()).length, Array.from(locked()).length, Array.from(names()).length].join('|');
     if (key === lastKey()) return; // prevent redundant recompute in same tick
     setLastKey(key);
-  const potential = estimatePotentialRowCount(root.mask, maxMask());
-  const defer = shouldDeferSubnetCompute(root.mask, maxMask());
+    const potential = estimatePotentialRowCount(root.mask, maxMask());
+    const defer = shouldDeferSubnetCompute(root.mask, maxMask());
+    // Reset initial compute tracking if root/maxMask pair changed
+    const rmKey = root.cidr + '|' + maxMask();
+    if (rmKey !== rootMaskKey()) {
+      setRootMaskKey(rmKey);
+      setHasComputedOnce(false);
+    }
     if (defer) {
       setIsComputing(true);
       // Use requestIdleCallback if available, else fallback to setTimeout
@@ -210,6 +219,7 @@ export default function SubnetsPage() {
         const rows = computeVisibleRows({ root, state, targetMask: maxMask() });
         setVisibleRows(rows);
         setIsComputing(false);
+        setHasComputedOnce(true);
       };
       if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
         (window as any).requestIdleCallback(run, { timeout: 500 });
@@ -220,6 +230,7 @@ export default function SubnetsPage() {
       const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
       setVisibleRows(computeVisibleRows({ root, state, targetMask: maxMask() }));
       setIsComputing(false);
+      setHasComputedOnce(true);
     }
   });
   // Pre-parse locked subnets for descendant checks
@@ -375,13 +386,29 @@ export default function SubnetsPage() {
                 <th class="text-right py-2 pr-3 font-medium">Usable Hosts</th>
               </tr>
             </thead>
-            <tbody class="table-body-bg">
-              <Show when={!isComputing()} fallback={<tr><td colSpan={4} class="py-10">
-                <div class="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
-                  <div class="w-8 h-8 border-3 border-sky-500/40 border-t-sky-600 rounded-full animate-spin" />
-                  <span class="text-xs font-medium tracking-wide">Computing subnet view…</span>
-                </div>
-              </td></tr>}>
+            <tbody class="table-body-bg relative">
+              {/* Initial heavy compute spinner (only before first rows available) */}
+              <Show when={isComputing() && !hasComputedOnce()}>
+                <tr>
+                  <td colSpan={4} class="py-10">
+                    <div class="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
+                      <div class="w-8 h-8 border-3 border-sky-500/40 border-t-sky-600 rounded-full animate-spin" />
+                      <span class="text-xs font-medium tracking-wide">Computing subnet view…</span>
+                    </div>
+                  </td>
+                </tr>
+              </Show>
+              {/* Lightweight overlay during subsequent recomputes (preserve rows & scroll) */}
+              <Show when={isComputing() && hasComputedOnce()}>
+                <tr class="pointer-events-none">
+                  <td colSpan={4} class="p-0">
+                    <div class="absolute top-1 right-2 flex items-center gap-2 text-slate-400 dark:text-slate-500 text-[10px]" role="status" aria-live="polite">
+                      <div class="w-4 h-4 border-2 border-sky-500/40 border-t-sky-600 rounded-full animate-spin" />
+                      <span>Updating…</span>
+                    </div>
+                  </td>
+                </tr>
+              </Show>
               <For each={visibleRows()}>{row => {
                 const f = formatSubnet(row.subnet);
                 const range = `${f.network} – ${f.broadcast}`;
@@ -459,7 +486,6 @@ export default function SubnetsPage() {
                   </tr>
                 );
               }}</For>
-              </Show>
             </tbody>
           </table>
         </div>
