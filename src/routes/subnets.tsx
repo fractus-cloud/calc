@@ -1,24 +1,36 @@
 import { createSignal, For, Show, createMemo, onMount, createEffect } from 'solid-js';
-import { safeParseCIDR, formatSubnet, IPv4Subnet } from '~/lib/subnet';
+import { safeParseCIDR, formatSubnet, IPv4Subnet, parseCIDR } from '~/lib/subnet';
 import { computeVisibleRows, ViewState } from '~/lib/subnetView';
 
-interface RowActionProps { rowSubnet: IPv4Subnet; depth: number; canSplit: boolean; expanded: boolean; collapseBlocked: boolean; onSplitToggle: () => void; locked: boolean; onLockToggle: () => void; }
-
-const INDENTS = ['pl-0','pl-2','pl-4','pl-6','pl-8','pl-10','pl-12','pl-14','pl-16','pl-18','pl-20','pl-22','pl-24'];
-const indentClass = (d: number) => INDENTS[Math.min(d, INDENTS.length -1)];
+interface RowActionProps { rowSubnet: IPv4Subnet; depth: number; canSplit: boolean; canJoin: boolean; expanded: boolean; onSplit: () => void; onCollapse: () => void; onJoin: () => void; }
 
 function RowActions(p: RowActionProps) {
+  // When not expanded yet: show Split button. Once expanded: show Collapse + Join.
   return (
-    <div class="flex gap-1">
-    <button
-  disabled={!p.canSplit || (p.expanded && p.collapseBlocked)}
-        onClick={p.onSplitToggle}
-  class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${(!p.canSplit || (p.expanded && p.collapseBlocked)) ? 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600' : (p.expanded ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700')}`}
-    aria-expanded={p.expanded ? 'true' : 'false'}
-  aria-disabled={(p.expanded && p.collapseBlocked) ? 'true' : 'false'}
-  title={p.expanded && p.collapseBlocked ? 'Unlock or collapse locked descendants first' : (p.canSplit ? (p.expanded ? 'Collapse this subnet' : 'Split into two subnets') : 'Cannot split further')}
-      >{p.canSplit ? (p.expanded ? 'Collapse' : 'Split') : '—'}</button>
-  {/* lock button moved to trailing column */}
+    <div class="flex gap-1 items-center">
+      <Show when={p.expanded} fallback={
+        <button
+          disabled={!p.canSplit}
+          onClick={p.onSplit}
+          class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.canSplit ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
+          title={p.canSplit ? 'Split into two subnets' : 'Cannot split further'}
+        >Split</button>
+      }>
+        <div class="flex gap-1">
+          <button
+            onClick={p.onCollapse}
+            disabled={!p.canSplit}
+            class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.canSplit ? 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
+            title="Collapse (temporarily hide descendants)"
+          >Collapse</button>
+          <button
+            onClick={p.onJoin}
+            disabled={!p.canSplit || !p.canJoin}
+            class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${(p.canSplit && p.canJoin) ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
+            title={p.canJoin ? 'Join (merge descendants into this single row)' : 'Cannot join: a locked descendant exists'}
+          >Join</button>
+        </div>
+      </Show>
     </div>
   );
 }
@@ -67,42 +79,38 @@ export default function SubnetsPage() {
   createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_LOCKED, JSON.stringify(Array.from(locked()))); } catch {} } });
   createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_NAMES, JSON.stringify(Object.fromEntries(names()))); } catch {} } });
 
-  // Determine if a locked subnet is a strict descendant of another
-  function hasLockedDescendant(parentCidr: string): boolean {
-    const parentParsed = safeParseCIDR(parentCidr);
-    if (!parentParsed.ok) return false;
-    const p = (parentParsed as any).value as IPv4Subnet;
-    for (const l of locked()) {
-      if (l === parentCidr) continue;
-      const lp = safeParseCIDR(l);
-      if (!lp.ok) continue;
-      const lv = (lp as any).value as IPv4Subnet;
-      if (lv.mask > p.mask && lv.network >= p.network && lv.broadcast <= p.broadcast) return true;
-    }
-    return false;
+  // Expand (split)
+  function expandSubnet(cidr: string) {
+    setExpanded(prev => { const next = new Set(prev); next.add(cidr); return next; });
   }
-
-  function toggleExpand(cidr: string) {
+  // Collapse ONLY the subnet (retain descendant expansion state for future re-expand)
+  function collapseSubnet(cidr: string) {
+    setExpanded(prev => { const next = new Set(prev); next.delete(cidr); return next; });
+  }
+  // Join: collapse AND forget all descendant expansion states
+  function joinSubnet(cidr: string) {
     setExpanded(prev => {
       const next = new Set(prev);
-      if (next.has(cidr)) {
-        // collapse attempt
-        if (hasLockedDescendant(cidr)) {
-          return next; // blocked
+      // Parse parent
+      let parent: IPv4Subnet | null = null;
+      try { parent = parseCIDR(cidr); } catch { parent = null; }
+      // Remove parent expansion
+      next.delete(cidr);
+      if (parent) {
+        for (const ex of Array.from(next)) {
+          try {
+            const node = parseCIDR(ex);
+            if (node.mask > parent.mask && node.network >= parent.network && node.broadcast <= parent.broadcast) {
+              next.delete(ex);
+            }
+          } catch {}
         }
-        next.delete(cidr);
-      } else {
-        next.add(cidr);
       }
       return next;
     });
   }
   function toggleLock(cidr: string) {
-    setLocked(prev => {
-      const next = new Set(prev);
-      if (next.has(cidr)) next.delete(cidr); else next.add(cidr);
-      return next;
-    });
+    setLocked(prev => { const next = new Set(prev); if (next.has(cidr)) next.delete(cidr); else next.add(cidr); return next; });
   }
   function setName(cidr: string, name: string) {
     setNames(prev => {
@@ -127,6 +135,8 @@ export default function SubnetsPage() {
     const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
     return computeVisibleRows({ root, state, targetMask: maxMask() });
   });
+  // Pre-parse locked subnets for descendant checks
+  const lockedParsed = createMemo(() => Array.from(locked()).map(c => { try { return parseCIDR(c); } catch { return null; } }).filter(Boolean) as IPv4Subnet[]);
 
   return (
     <main class="mx-auto max-w-6xl p-4 space-y-6">
@@ -233,11 +243,10 @@ export default function SubnetsPage() {
           <table class="w-full text-sm">
             <thead class="bg-slate-200 dark:bg-slate-800/70 text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-400">
               <tr>
-                <th class="text-left pl-2 py-2 font-medium">Actions</th>
-                <th class="text-left py-2 font-medium">CIDR / Name</th>
+                <th class="text-left pl-2 py-2 font-medium w-[1%]">Actions</th>
+                <th class="text-left py-2 font-medium">CIDR / Name / Lock</th>
                 <th class="text-left py-2 font-medium">Range (Network – Broadcast)</th>
                 <th class="text-right py-2 pr-3 font-medium">Usable Hosts</th>
-                <th class="py-2 pr-3 font-medium"> </th>
               </tr>
             </thead>
             <tbody class="bg-slate-50 dark:bg-slate-900/40">
@@ -250,14 +259,26 @@ export default function SubnetsPage() {
                 const isExpanded = expanded().has(cidr);
                 const canSplit = row.subnet.mask < maxMask();
                 const isLocked = locked().has(cidr);
-                const collapseBlocked = isExpanded && hasLockedDescendant(cidr);
                 const [editing, setEditing] = createSignal(false);
                 let inputRef: HTMLInputElement | undefined;
                 function saveName() { if (inputRef) { setName(cidr, inputRef.value.trim()); setEditing(false); } }
                 return (
-                  <tr class="border-b border-slate-200 dark:border-slate-700/30">
-                    <td class={`align-middle pr-2 ${indentClass(row.depth)}`}>
-                      <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} expanded={isExpanded} collapseBlocked={collapseBlocked} onSplitToggle={() => toggleExpand(cidr)} locked={isLocked} onLockToggle={() => toggleLock(cidr)} />
+                  <tr class="border-b border-slate-200 dark:border-slate-700/30" data-depth={row.depth}>
+                    <td class="align-middle pr-2">
+                      <div class="relative depth-wrapper" data-depth={row.depth}>
+                        <div class="depth-lines" aria-hidden="true">
+                          <For each={[...Array(row.depth).keys()]}>{i => {
+                            const cls = `dl-${i}`; return <span class={`depth-line ${cls}`} data-i={i} />; }}
+                          </For>
+                        </div>
+                        <div class={`relative z-10 ${`depth-pad-${row.depth <= 32 ? row.depth : 32}`}`}>
+                          {(() => {
+                            // Determine if any locked descendant exists (exclude self)
+                            const hasLockedDesc = lockedParsed().some(ls => ls.cidr !== cidr && ls.mask > row.subnet.mask && ls.network >= row.subnet.network && ls.broadcast <= row.subnet.broadcast);
+                            return <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} canJoin={!hasLockedDesc} expanded={isExpanded} onSplit={() => expandSubnet(cidr)} onCollapse={() => collapseSubnet(cidr)} onJoin={() => joinSubnet(cidr)} />;
+                          })()}
+                        </div>
+                      </div>
                     </td>
                     <td class={`py-2 font-mono`}>
                       <div class="flex items-center gap-2">
@@ -272,34 +293,32 @@ export default function SubnetsPage() {
                           <span class="text-xs text-amber-500 font-medium">{name}</span>
                           <button class="text-[10px] px-2 h-6 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={()=> setEditing(true)} aria-label="Edit name" title={name ? 'Rename subnet' : 'Add name to subnet'}>{name? 'Rename':'Name'}</button>
                         </Show>
-                        <Show when={row.locked}><span class="text-[10px] uppercase tracking-wide text-amber-500">LOCKED</span></Show>
+                        <button
+                          onClick={() => toggleLock(cidr)}
+                          class={`group w-7 h-7 flex items-center justify-center rounded-md border transition-colors ${isLocked ? 'border-amber-500 bg-amber-500/20 hover:bg-amber-500/30' : 'border-transparent hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+                          aria-label={isLocked ? 'Unlock subnet' : 'Lock subnet'}
+                          title={isLocked ? 'Unlock subnet' : 'Lock subnet'}
+                          data-pressed={isLocked ? 'true' : 'false'}
+                          data-lock-btn
+                        >
+                          <Show when={isLocked} fallback={
+                            <svg aria-hidden viewBox="0 0 24 24" class="w-4 h-4 stroke-[1.8] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                              <rect x="3" y="11" width="18" height="9" rx="2" />
+                              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                              <path d="M12 15v-1" />
+                            </svg>
+                          }>
+                            <svg aria-hidden viewBox="0 0 24 24" class="w-4 h-4 stroke-[1.8] text-amber-500" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                              <rect x="3" y="11" width="18" height="9" rx="2" />
+                              <path d="M8 11V9a4 4 0 0 1 8 0v2" />
+                              <path d="M12 15v-2" />
+                            </svg>
+                          </Show>
+                        </button>
                       </div>
                     </td>
                     <td class="font-mono text-xs text-slate-600 dark:text-slate-400">{range}</td>
                     <td class="font-mono text-xs text-slate-600 dark:text-slate-400 text-right pr-3">{f.hosts}</td>
-                    <td class="pr-3 align-middle">
-                      <button
-                        onClick={() => toggleLock(cidr)}
-                        class={`group w-7 h-7 flex items-center justify-center rounded-md border transition-colors ${isLocked ? 'border-amber-500 bg-amber-500/20 hover:bg-amber-500/30' : 'border-transparent hover:bg-slate-200 dark:hover:bg-slate-800'}`}
-                        aria-pressed={isLocked ? 'true' : 'false'}
-                        aria-label={isLocked ? 'Unlock subnet' : 'Lock subnet'}
-                        title={isLocked ? 'Unlock subnet' : 'Lock subnet'}
-                      >
-                        <Show when={isLocked} fallback={
-                          <svg aria-hidden viewBox="0 0 24 24" class="w-4 h-4 stroke-[1.8] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="11" width="18" height="9" rx="2" />
-                            <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-                            <path d="M12 15v-1" />
-                          </svg>
-                        }>
-                          <svg aria-hidden viewBox="0 0 24 24" class="w-4 h-4 stroke-[1.8] text-amber-500" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="11" width="18" height="9" rx="2" />
-                            <path d="M8 11V9a4 4 0 0 1 8 0v2" />
-                            <path d="M12 15v-2" />
-                          </svg>
-                        </Show>
-                      </button>
-                    </td>
                   </tr>
                 );
               }}</For>

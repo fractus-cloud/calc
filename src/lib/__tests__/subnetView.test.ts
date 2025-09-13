@@ -31,4 +31,15 @@ describe('computeVisibleRows', () => {
     expect(locked).toBeTruthy();
     expect(locked?.depth).toBeGreaterThan(0);
   });
+
+  it('depth increases with deeper locks and expansion independent', () => {
+    const root = parseCIDR('10.0.0.0/24');
+    const state = makeState();
+    state.expanded.add(root.cidr); // expand root -> shows /25
+    state.expanded.add('10.0.0.0/25'); // expand first /25 -> shows /26
+    state.locked.add('10.0.0.0/26');
+    const rows = computeVisibleRows({ root, state, targetMask: state.maxDepth });
+    const r26 = rows.find(r => r.subnet.cidr === '10.0.0.0/26');
+    expect(r26?.depth).toBe(2);
+  });
 });

@@ -45,3 +45,83 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: rgb(var(--accent)); }
 
 .table-gradient-header { background: linear-gradient(to bottom right, rgb(var(--bg-alt)), rgb(var(--bg-soft))); }
+
+/* Depth visualization for subnet table */
+.depth-wrapper { padding-left: 0.25rem; }
+.depth-wrapper[data-depth] { --depth: attr(data-depth integer); }
+.depth-lines { position: absolute; inset: 0; pointer-events: none; }
+.depth-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(var(--border)/0.35); }
+/* Simpler: rely on inline style removed, so generate left via utility classes if needed later */
+
+/* Generated utility classes (12px = 0.75rem step) */
+/* Padding for action cell content to visually indent */
+/* Depth 0 no extra padding */
+.depth-pad-0 { padding-left: 0; }
+.depth-pad-1 { padding-left: 12px; }
+.depth-pad-2 { padding-left: 24px; }
+.depth-pad-3 { padding-left: 36px; }
+.depth-pad-4 { padding-left: 48px; }
+.depth-pad-5 { padding-left: 60px; }
+.depth-pad-6 { padding-left: 72px; }
+.depth-pad-7 { padding-left: 84px; }
+.depth-pad-8 { padding-left: 96px; }
+.depth-pad-9 { padding-left: 108px; }
+.depth-pad-10 { padding-left: 120px; }
+.depth-pad-11 { padding-left: 132px; }
+.depth-pad-12 { padding-left: 144px; }
+.depth-pad-13 { padding-left: 156px; }
+.depth-pad-14 { padding-left: 168px; }
+.depth-pad-15 { padding-left: 180px; }
+.depth-pad-16 { padding-left: 192px; }
+.depth-pad-17 { padding-left: 204px; }
+.depth-pad-18 { padding-left: 216px; }
+.depth-pad-19 { padding-left: 228px; }
+.depth-pad-20 { padding-left: 240px; }
+.depth-pad-21 { padding-left: 252px; }
+.depth-pad-22 { padding-left: 264px; }
+.depth-pad-23 { padding-left: 276px; }
+.depth-pad-24 { padding-left: 288px; }
+.depth-pad-25 { padding-left: 300px; }
+.depth-pad-26 { padding-left: 312px; }
+.depth-pad-27 { padding-left: 324px; }
+.depth-pad-28 { padding-left: 336px; }
+.depth-pad-29 { padding-left: 348px; }
+.depth-pad-30 { padding-left: 360px; }
+.depth-pad-31 { padding-left: 372px; }
+.depth-pad-32 { padding-left: 384px; }
+
+/* Depth line horizontal positioning */
+.dl-0 { left: 0px; }
+.dl-1 { left: 12px; }
+.dl-2 { left: 24px; }
+.dl-3 { left: 36px; }
+.dl-4 { left: 48px; }
+.dl-5 { left: 60px; }
+.dl-6 { left: 72px; }
+.dl-7 { left: 84px; }
+.dl-8 { left: 96px; }
+.dl-9 { left: 108px; }
+.dl-10 { left: 120px; }
+.dl-11 { left: 132px; }
+.dl-12 { left: 144px; }
+.dl-13 { left: 156px; }
+.dl-14 { left: 168px; }
+.dl-15 { left: 180px; }
+.dl-16 { left: 192px; }
+.dl-17 { left: 204px; }
+.dl-18 { left: 216px; }
+.dl-19 { left: 228px; }
+.dl-20 { left: 240px; }
+.dl-21 { left: 252px; }
+.dl-22 { left: 264px; }
+.dl-23 { left: 276px; }
+.dl-24 { left: 288px; }
+.dl-25 { left: 300px; }
+.dl-26 { left: 312px; }
+.dl-27 { left: 324px; }
+.dl-28 { left: 336px; }
+.dl-29 { left: 348px; }
+.dl-30 { left: 360px; }
+.dl-31 { left: 372px; }
+.dl-32 { left: 384px; }
+
