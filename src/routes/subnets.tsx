@@ -38,6 +38,8 @@ export default function SubnetsPage() {
   const [input, setInput] = createSignal(DEFAULT_CIDR);
   const [maxMask, setMaxMask] = createSignal(24);
   let maxMaskRef: HTMLInputElement | undefined;
+  // Explicit ref to CIDR input to force immediate visual reset (e2e reliability)
+  let cidrRef: HTMLInputElement | undefined;
   const parsed = createMemo(() => safeParseCIDR(input()));
   const rootSubnet = createMemo<IPv4Subnet | null>(() => (parsed().ok ? (parsed() as { ok: true; value: IPv4Subnet }).value : null));
   const errorMsg = createMemo(() => (parsed().ok ? null : (parsed() as { ok: false; error: string }).error));
@@ -68,7 +70,8 @@ export default function SubnetsPage() {
       if (!confirmed) return;
     }
   const prevShare = shareApplied();
-    setInput(DEFAULT_CIDR);
+  setInput(DEFAULT_CIDR);
+  if (cidrRef) cidrRef.value = DEFAULT_CIDR; // ensure DOM reflects reset synchronously
     setMaxMask(24);
     if (maxMaskRef) maxMaskRef.value = '24';
     setExpanded(new Set<string>());
@@ -307,7 +310,7 @@ export default function SubnetsPage() {
       </header>
       <form class="flex flex-col md:flex-row gap-4 items-start md:items-end card p-5" onSubmit={e => e.preventDefault()}>
         <label class="flex flex-col text-sm font-medium text-primary gap-1">CIDR
-          <input type="text" value={input()} onInput={e => setInput(e.currentTarget.value)} class="font-mono min-w-[12rem]" placeholder="10.0.0.0/8" />
+          <input ref={el=>cidrRef=el} type="text" value={input()} onInput={e => setInput(e.currentTarget.value)} class="font-mono min-w-[12rem]" placeholder="10.0.0.0/8" />
         </label>
         <label class="flex flex-col text-sm font-medium text-primary gap-1">Max mask
           <input ref={el=>maxMaskRef=el} type="number" min={0} max={32} value={maxMask()} onInput={e => setMaxMask(e.currentTarget.valueAsNumber)} class="font-mono w-28" />
