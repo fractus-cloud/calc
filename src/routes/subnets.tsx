@@ -60,29 +60,46 @@ export default function SubnetsPage() {
 
   const location = useLocation();
   const [shareApplied, setShareApplied] = createSignal<string | null>(null);
+  const [isClearing, setIsClearing] = createSignal(false);
 
   function resetAll() {
     if (typeof window !== 'undefined') {
       const confirmed = window.confirm('This will clear all subnet state (input, names, locks, expansions). Continue?');
       if (!confirmed) return;
     }
+  const prevShare = shareApplied();
     setInput(DEFAULT_CIDR);
     setMaxMask(24);
     if (maxMaskRef) maxMaskRef.value = '24';
     setExpanded(new Set<string>());
     setLocked(new Set<string>());
     setSplitSet(new Set<string>());
-    setNames(new Map<string,string>());
-    setShareApplied(null);
+  setNames(new Map<string,string>());
+  // Mark clearing to suppress share param reapplication while we mutate URL
+  setIsClearing(true);
+  // Force immediate UI refresh: clear computed rows & recompute flags so effect runs next tick.
+  setVisibleRows([]);
+  setLastKey('');
+  setHasComputedOnce(false);
+  setRootMaskKey('');
     if (typeof window !== 'undefined') {
       try {
         const keys = [K_INPUT, K_MAXMASK, K_EXPANDED, K_LOCKED, K_SPLIT, K_NAMES];
         for (const k of keys) localStorage.removeItem(k);
         const url = new URL(window.location.href);
+        const hadParam = url.searchParams.has('subnets');
         url.searchParams.delete('subnets');
         window.history.replaceState(null, '', url.toString());
+        if (!hadParam) {
+          // If not from share link, allow future share links by nulling token
+          setShareApplied(null);
+        } else if (!prevShare) {
+          // If came from a share link but shareApplied missing (edge), set dummy token
+          setShareApplied('__cleared__');
+        }
       } catch {}
     }
+  setIsClearing(false);
   }
 
   onMount(() => {
@@ -108,7 +125,8 @@ export default function SubnetsPage() {
 
   // Reactively watch the location.search for a ?subnets= param and apply once per value
   createEffect(() => {
-    if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined') return;
+  if (isClearing()) return; // skip while clearing state
     const search = location.search; // triggers effect when router updates
     const url = new URL(window.location.origin + location.pathname + search + location.hash);
     const qp = url.searchParams.get('subnets');

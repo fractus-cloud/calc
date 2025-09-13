@@ -35,7 +35,7 @@ test.describe('Subnets clear button', () => {
     await page.getByTestId('clear-subnets').click();
 
     // After clearing, CIDR resets to default and max mask resets to 24
-    await expect(cidrInput).toHaveValue('10.0.0.0/16', { timeout: 10000 });
+  await expect.poll(async () => await cidrInput.inputValue(), { timeout: 10000 }).toBe('10.0.0.0/16');
     const mmVal = await maxMaskInput.inputValue();
     expect(mmVal).toBe('24');
   });
