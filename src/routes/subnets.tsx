@@ -147,6 +147,8 @@ export default function SubnetsPage() {
         if (typeof data.maxMask === 'number') setMaxMask(data.maxMask);
         if (Array.isArray(data.expanded)) setExpanded(new Set(data.expanded as string[]));
         if (Array.isArray(data.locked)) setLocked(new Set(data.locked as string[]));
+  // New (Sept 2025): share payload now includes logical split state for collapsed-but-split rows.
+  if (Array.isArray((data as any).split)) setSplitSet(new Set((data as any).split as string[]));
         if (data.names && typeof data.names === 'object') setNames(new Map(Object.entries(data.names as Record<string,string>)));
   setShareApplied(qp);
       }
@@ -318,6 +320,8 @@ export default function SubnetsPage() {
             maxMask: maxMask(),
             expanded: Array.from(expanded()),
             locked: Array.from(locked()),
+            // Include logical split state (needed when a subnet has been split then collapsed)
+            split: Array.from(splitSet()),
             names: Object.fromEntries(names())
           })} />
           <button type="button" class="text-[11px] px-3 h-8 rounded btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:hover:bg-slate-700" onClick={() => {
@@ -327,6 +331,7 @@ export default function SubnetsPage() {
               maxMask: maxMask(),
               expanded: Array.from(expanded()),
               locked: Array.from(locked()),
+              split: Array.from(splitSet()),
               names: Object.fromEntries(names())
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -374,6 +379,7 @@ export default function SubnetsPage() {
                     if (typeof data.maxMask === 'number') setMaxMask(data.maxMask);
                     if (Array.isArray(data.expanded)) setExpanded(new Set(data.expanded as string[]));
                     if (Array.isArray(data.locked)) setLocked(new Set(data.locked as string[]));
+                    if (Array.isArray((data as any).split)) setSplitSet(new Set((data as any).split as string[]));
                     if (data.names && typeof data.names === 'object') setNames(new Map(Object.entries(data.names as Record<string,string>)));
                   } else { // CSV
                     const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
@@ -467,7 +473,9 @@ export default function SubnetsPage() {
                           {(() => {
                             // Determine if any locked descendant exists (exclude self)
                             const hasLockedDesc = lockedParsed().some(ls => ls.cidr !== cidr && ls.mask > row.subnet.mask && ls.network >= row.subnet.network && ls.broadcast <= row.subnet.broadcast);
-                            const isSplit = splitSet().has(cidr); // root no longer implicitly split
+                            // Treat a subnet as logically split if we explicitly tracked it OR it is currently expanded.
+                            // This provides backward compatibility for older share links that lacked the split array.
+                            const isSplit = splitSet().has(cidr) || expanded().has(cidr);
                             return <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} canJoin={!hasLockedDesc} expanded={isExpanded} isSplit={isSplit} onSplit={() => splitSubnet(cidr, row.depth)} onExpand={() => expandSubnet(cidr)} onCollapse={() => collapseSubnet(cidr)} onJoin={() => joinSubnet(cidr)} />;
                           })()}
                         </div>
