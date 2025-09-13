@@ -1,0 +1,312 @@
+import { createSignal, For, Show, createMemo, onMount, createEffect } from 'solid-js';
+import { safeParseCIDR, formatSubnet, IPv4Subnet } from '~/lib/subnet';
+import { computeVisibleRows, ViewState } from '~/lib/subnetView';
+
+interface RowActionProps { rowSubnet: IPv4Subnet; depth: number; canSplit: boolean; expanded: boolean; collapseBlocked: boolean; onSplitToggle: () => void; locked: boolean; onLockToggle: () => void; }
+
+const INDENTS = ['pl-0','pl-2','pl-4','pl-6','pl-8','pl-10','pl-12','pl-14','pl-16','pl-18','pl-20','pl-22','pl-24'];
+const indentClass = (d: number) => INDENTS[Math.min(d, INDENTS.length -1)];
+
+function RowActions(p: RowActionProps) {
+  return (
+    <div class="flex gap-1">
+    <button
+  disabled={!p.canSplit || (p.expanded && p.collapseBlocked)}
+        onClick={p.onSplitToggle}
+  class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${(!p.canSplit || (p.expanded && p.collapseBlocked)) ? 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600' : (p.expanded ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700')}`}
+    aria-expanded={p.expanded ? 'true' : 'false'}
+  aria-disabled={(p.expanded && p.collapseBlocked) ? 'true' : 'false'}
+  title={p.expanded && p.collapseBlocked ? 'Unlock or collapse locked descendants first' : (p.canSplit ? (p.expanded ? 'Collapse this subnet' : 'Split into two subnets') : 'Cannot split further')}
+      >{p.canSplit ? (p.expanded ? 'Collapse' : 'Split') : '—'}</button>
+  {/* lock button moved to trailing column */}
+    </div>
+  );
+}
+
+export default function SubnetsPage() {
+  const [input, setInput] = createSignal('10.0.0.0/16');
+  const [maxMask, setMaxMask] = createSignal(24);
+  const parsed = createMemo(() => safeParseCIDR(input()));
+  const rootSubnet = createMemo<IPv4Subnet | null>(() => (parsed().ok ? (parsed() as { ok: true; value: IPv4Subnet }).value : null));
+  const errorMsg = createMemo(() => (parsed().ok ? null : (parsed() as { ok: false; error: string }).error));
+
+  // Reactive view state
+  const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
+  const [locked, setLocked] = createSignal<Set<string>>(new Set());
+  const [names, setNames] = createSignal<Map<string,string>>(new Map());
+
+  // Local storage persistence keys
+  const LS_PREFIX = 'subnets:';
+  const K_INPUT = LS_PREFIX + 'input';
+  const K_MAXMASK = LS_PREFIX + 'maxMask';
+  const K_EXPANDED = LS_PREFIX + 'expanded';
+  const K_LOCKED = LS_PREFIX + 'locked';
+  const K_NAMES = LS_PREFIX + 'names';
+
+  onMount(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storedInput = localStorage.getItem(K_INPUT); if (storedInput) setInput(storedInput);
+      const storedMask = localStorage.getItem(K_MAXMASK); if (storedMask) setMaxMask(parseInt(storedMask,10));
+      const storedExpanded = localStorage.getItem(K_EXPANDED); if (storedExpanded) setExpanded(new Set(JSON.parse(storedExpanded) as string[]));
+      const storedLocked = localStorage.getItem(K_LOCKED); if (storedLocked) setLocked(new Set(JSON.parse(storedLocked) as string[]));
+      const storedNames = localStorage.getItem(K_NAMES); if (storedNames) {
+        const obj = JSON.parse(storedNames) as Record<string,string>;
+        setNames(new Map(Object.entries(obj)));
+      }
+    } catch (e) {
+      // Ignore malformed persisted data
+      console.warn('Failed to load persisted subnet state', e);
+    }
+  });
+
+  // Persistors
+  createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_INPUT, input()); } catch {} } });
+  createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_MAXMASK, String(maxMask())); } catch {} } });
+  createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_EXPANDED, JSON.stringify(Array.from(expanded()))); } catch {} } });
+  createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_LOCKED, JSON.stringify(Array.from(locked()))); } catch {} } });
+  createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_NAMES, JSON.stringify(Object.fromEntries(names()))); } catch {} } });
+
+  // Determine if a locked subnet is a strict descendant of another
+  function hasLockedDescendant(parentCidr: string): boolean {
+    const parentParsed = safeParseCIDR(parentCidr);
+    if (!parentParsed.ok) return false;
+    const p = (parentParsed as any).value as IPv4Subnet;
+    for (const l of locked()) {
+      if (l === parentCidr) continue;
+      const lp = safeParseCIDR(l);
+      if (!lp.ok) continue;
+      const lv = (lp as any).value as IPv4Subnet;
+      if (lv.mask > p.mask && lv.network >= p.network && lv.broadcast <= p.broadcast) return true;
+    }
+    return false;
+  }
+
+  function toggleExpand(cidr: string) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(cidr)) {
+        // collapse attempt
+        if (hasLockedDescendant(cidr)) {
+          return next; // blocked
+        }
+        next.delete(cidr);
+      } else {
+        next.add(cidr);
+      }
+      return next;
+    });
+  }
+  function toggleLock(cidr: string) {
+    setLocked(prev => {
+      const next = new Set(prev);
+      if (next.has(cidr)) next.delete(cidr); else next.add(cidr);
+      return next;
+    });
+  }
+  function setName(cidr: string, name: string) {
+    setNames(prev => {
+      const next = new Map(prev);
+      if (name) next.set(cidr, name); else next.delete(cidr);
+      return next;
+    });
+    if (name.trim()) {
+      // Auto-lock when naming
+      setLocked(prev => {
+        if (prev.has(cidr)) return prev;
+        const next = new Set(prev);
+        next.add(cidr);
+        return next;
+      });
+    }
+  }
+
+  const visible = createMemo(() => {
+    const root = rootSubnet();
+    if (!root) return [];
+    const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
+    return computeVisibleRows({ root, state, targetMask: maxMask() });
+  });
+
+  return (
+    <main class="mx-auto max-w-6xl p-4 space-y-6">
+      <header class="space-y-2">
+        <h1 class="text-3xl font-light tracking-tight"><span class="text-sky-500 font-semibold">IPv4</span> Subnet Explorer</h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 max-w-prose">Explore hierarchical subnetting. Split, name & lock notable networks for planning.</p>
+      </header>
+      <form class="flex flex-col md:flex-row gap-4 items-start md:items-end bg-slate-100 dark:bg-slate-900/40 p-5 rounded-lg border border-slate-300 dark:border-slate-700/50" onSubmit={e => e.preventDefault()}>
+        <label class="flex flex-col text-sm font-medium text-slate-700 dark:text-slate-300 gap-1">CIDR
+          <input value={input()} onInput={e => setInput(e.currentTarget.value)} class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-600 rounded px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-600 min-w-[12rem]" placeholder="10.0.0.0/8" />
+        </label>
+        <label class="flex flex-col text-sm font-medium text-slate-700 dark:text-slate-300 gap-1">Max mask
+          <input type="number" min={0} max={32} value={maxMask()} onInput={e => setMaxMask(e.currentTarget.valueAsNumber)} class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-600 rounded px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-600 w-28" />
+        </label>
+        <p class="text-xs text-slate-600 dark:text-slate-500 leading-5 max-w-sm pt-5">Lock keeps a subnet visible even if its ancestors collapse. Name adds a custom label (click name icon). Split divides into two equal child subnets.</p>
+        <div class="flex flex-wrap gap-2 pt-5">
+          <button type="button" class="text-[11px] px-3 h-8 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={() => {
+            const payload = {
+              version: 1,
+              input: input(),
+              maxMask: maxMask(),
+              expanded: Array.from(expanded()),
+              locked: Array.from(locked()),
+              names: Object.fromEntries(names())
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'subnets-export.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }}>Export JSON</button>
+          <button type="button" class="text-[11px] px-3 h-8 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={() => {
+            // CSV: cidr,name,locked,expanded (include union of named, locked, expanded, plus root)
+            const rows: string[] = ['cidr,name,locked,expanded'];
+            const set = new Set<string>();
+            for (const k of names().keys()) set.add(k);
+            for (const k of locked()) set.add(k);
+            for (const k of expanded()) set.add(k);
+            const root = rootSubnet(); if (root) set.add(root.cidr);
+            const nameMap = names();
+            Array.from(set).sort().forEach(cidr => {
+              const name = nameMap.get(cidr) || '';
+              const lockedFlag = locked().has(cidr) ? '1' : '0';
+              const expandedFlag = expanded().has(cidr) ? '1' : '0';
+              const safeName = '"' + name.replace(/"/g,'""') + '"';
+              rows.push([cidr, safeName, lockedFlag, expandedFlag].join(','));
+            });
+            const csv = rows.join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'subnets-export.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }}>Export CSV</button>
+          <label class="text-[11px] px-3 h-8 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center cursor-pointer">Import
+            <input type="file" accept=".json,.csv,application/json,text/csv" class="hidden" onChange={e => {
+              const file = e.currentTarget.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                try {
+                  const text = String(reader.result||'');
+                  if (file.name.endsWith('.json') || text.trim().startsWith('{')) {
+                    const data = JSON.parse(text);
+                    if (data.input) setInput(data.input);
+                    if (typeof data.maxMask === 'number') setMaxMask(data.maxMask);
+                    if (Array.isArray(data.expanded)) setExpanded(new Set(data.expanded as string[]));
+                    if (Array.isArray(data.locked)) setLocked(new Set(data.locked as string[]));
+                    if (data.names && typeof data.names === 'object') setNames(new Map(Object.entries(data.names as Record<string,string>)));
+                  } else { // CSV
+                    const lines = text.split(/\r?\n/).filter(l=>l.trim().length);
+                    if (lines.length > 1 && lines[0].toLowerCase().startsWith('cidr')) {
+                      const exp = new Set<string>();
+                      const lockSet = new Set<string>();
+                      const nameMap = new Map<string,string>();
+                      for (let i=1;i<lines.length;i++) {
+                        const line = lines[i];
+                        const parts: string[] = [];
+                        let cur=''; let inQ=false; for (let c=0;c<line.length;c++){ const ch=line[c]; if (ch==='"'){ if (inQ && line[c+1]==='"'){ cur+='"'; c++; } else { inQ=!inQ; } } else if(ch===',' && !inQ){ parts.push(cur); cur=''; } else cur+=ch; } parts.push(cur);
+                        const [cidr,name,lockedFlag,expandedFlag] = parts;
+                        if (cidr) {
+                          if (name) nameMap.set(cidr, name);
+                          if (lockedFlag==='1') lockSet.add(cidr);
+                          if (expandedFlag==='1') exp.add(cidr);
+                        }
+                      }
+                      setNames(nameMap); setLocked(lockSet); setExpanded(exp);
+                    }
+                  }
+                } catch (err) {
+                  alert('Failed to import: '+ (err as any).message);
+                }
+              };
+              reader.readAsText(file);
+              e.currentTarget.value = '';
+            }} />
+          </label>
+        </div>
+      </form>
+      <Show when={parsed().ok} fallback={<p class="text-rose-500 font-mono">Error: {errorMsg()}</p>}>
+        <div class="overflow-x-auto rounded-md border border-slate-300 dark:border-slate-700/50">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-200 dark:bg-slate-800/70 text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-400">
+              <tr>
+                <th class="text-left pl-2 py-2 font-medium">Actions</th>
+                <th class="text-left py-2 font-medium">CIDR / Name</th>
+                <th class="text-left py-2 font-medium">Range (Network – Broadcast)</th>
+                <th class="text-right py-2 pr-3 font-medium">Usable Hosts</th>
+                <th class="py-2 pr-3 font-medium"> </th>
+              </tr>
+            </thead>
+            <tbody class="bg-slate-50 dark:bg-slate-900/40">
+              <For each={visible()}>{row => {
+                const f = formatSubnet(row.subnet);
+                const range = `${f.network} – ${f.broadcast}`;
+                const cidr = row.subnet.cidr;
+                const currentNames = names();
+                const name = currentNames.get(cidr);
+                const isExpanded = expanded().has(cidr);
+                const canSplit = row.subnet.mask < maxMask();
+                const isLocked = locked().has(cidr);
+                const collapseBlocked = isExpanded && hasLockedDescendant(cidr);
+                const [editing, setEditing] = createSignal(false);
+                let inputRef: HTMLInputElement | undefined;
+                function saveName() { if (inputRef) { setName(cidr, inputRef.value.trim()); setEditing(false); } }
+                return (
+                  <tr class="border-b border-slate-200 dark:border-slate-700/30">
+                    <td class={`align-middle pr-2 ${indentClass(row.depth)}`}>
+                      <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} expanded={isExpanded} collapseBlocked={collapseBlocked} onSplitToggle={() => toggleExpand(cidr)} locked={isLocked} onLockToggle={() => toggleLock(cidr)} />
+                    </td>
+                    <td class={`py-2 font-mono`}>
+                      <div class="flex items-center gap-2">
+                        <span class="font-semibold text-sky-500 dark:text-sky-400 select-none">{cidr}</span>
+                        <Show when={!editing()} fallback={
+                          <form onSubmit={(e)=>{e.preventDefault(); saveName();}} class="flex items-center gap-1">
+                            <input ref={el=>inputRef=el} value={name||''} autofocus placeholder="Name" class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-xs" />
+                            <button type="submit" class="text-[10px] px-2 h-6 rounded bg-sky-600 text-white">Save</button>
+                            <button type="button" onClick={()=>{setEditing(false);}} class="text-[10px] px-2 h-6 rounded bg-slate-400 dark:bg-slate-600 text-white">X</button>
+                          </form>
+                        }>
+                          <span class="text-xs text-amber-500 font-medium">{name}</span>
+                          <button class="text-[10px] px-2 h-6 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={()=> setEditing(true)} aria-label="Edit name" title={name ? 'Rename subnet' : 'Add name to subnet'}>{name? 'Rename':'Name'}</button>
+                        </Show>
+                        <Show when={row.locked}><span class="text-[10px] uppercase tracking-wide text-amber-500">LOCKED</span></Show>
+                      </div>
+                    </td>
+                    <td class="font-mono text-xs text-slate-600 dark:text-slate-400">{range}</td>
+                    <td class="font-mono text-xs text-slate-600 dark:text-slate-400 text-right pr-3">{f.hosts}</td>
+                    <td class="pr-3 align-middle">
+                      <button
+                        onClick={() => toggleLock(cidr)}
+                        class={`group w-7 h-7 flex items-center justify-center rounded-md border transition-colors ${isLocked ? 'border-amber-500 bg-amber-500/20 hover:bg-amber-500/30' : 'border-transparent hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+                        aria-pressed={isLocked ? 'true' : 'false'}
+                        aria-label={isLocked ? 'Unlock subnet' : 'Lock subnet'}
+                        title={isLocked ? 'Unlock subnet' : 'Lock subnet'}
+                      >
+                        <Show when={isLocked} fallback={
+                          <svg aria-hidden viewBox="0 0 24 24" class="w-4 h-4 stroke-[1.8] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="9" rx="2" />
+                            <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                            <path d="M12 15v-1" />
+                          </svg>
+                        }>
+                          <svg aria-hidden viewBox="0 0 24 24" class="w-4 h-4 stroke-[1.8] text-amber-500" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="9" rx="2" />
+                            <path d="M8 11V9a4 4 0 0 1 8 0v2" />
+                            <path d="M12 15v-2" />
+                          </svg>
+                        </Show>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              }}</For>
+            </tbody>
+          </table>
+        </div>
+      </Show>
+    </main>
+  );
+}

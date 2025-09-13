@@ -1,0 +1,36 @@
+{
+	"name": "example-with-tailwindcss",
+	"type": "module",
+	"scripts": {
+		"dev": "vinxi dev",
+		"build": "vinxi build",
+		"start": "vinxi start",
+		"preview": "npm run build && npx wrangler dev",
+		"deploy": "npm run build && wrangler deploy",
+		"cf-typegen": "wrangler types",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:e2e": "playwright test",
+		"test:all": "vitest run && playwright test"
+	},
+	"dependencies": {
+		"@solidjs/router": "^0.15.0",
+		"@solidjs/start": "^1.1.0",
+		"solid-js": "^1.9.5",
+		"vinxi": "^0.5.7"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.48.2",
+		"@tailwindcss/vite": "^4.0.7",
+		"@types/node": "^24.3.2",
+		"@vitest/coverage-v8": "^2.0.5",
+		"typescript": "^5.6.3",
+		"nitropack": "^2.12.6",
+		"tailwindcss": "^4.0.7",
+		"vitest": "^2.0.5",
+		"wrangler": "^4.36.0"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}
