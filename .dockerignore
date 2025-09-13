@@ -1,0 +1,27 @@
+# Ignore node modules & build caches
+node_modules
+npm-debug.log*
+.pnpm-store
+.yarn*
+
+# Git & CI
+.git
+.github
+
+# Local env & editor
+.env*
+*.swp
+*.log
+.DS_Store
+
+# Build outputs that will be re-generated
+.vinxi
+.output
+dist
+coverage
+playwright-report
+test-results
+
+# Tests not needed in image
+tests
+src/lib/__tests__

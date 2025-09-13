@@ -32,6 +32,33 @@ A small collection of focused calculation and visualization tools. The first pub
    npm test
    ```
 
+## Docker
+
+Pull the published image (multi-arch) from GHCR and run:
+
+```sh
+docker pull ghcr.io/fractus-cloud/calc:latest
+docker run --rm -p 8080:8080 ghcr.io/fractus-cloud/calc:latest
+```
+
+Open http://localhost:8080/
+
+Specific version (tagged release):
+
+```sh
+docker pull ghcr.io/fractus-cloud/calc:vX.Y.Z
+docker run --rm -p 8080:8080 ghcr.io/fractus-cloud/calc:vX.Y.Z
+```
+
+Optional: build locally instead of pulling:
+
+```sh
+docker build -t ghcr.io/fractus-cloud/calc:dev .
+docker run --rm -p 8080:8080 ghcr.io/fractus-cloud/calc:dev
+```
+
+Image publishing: CI pushes images on branch updates and semver tags (`v*.*.*`). The `latest` tag tracks `master`.
+
 ## Project Layout
 
 ```text
