@@ -9,6 +9,7 @@ A small collection of focused calculation and visualization tools. The first pub
 - Interactive IPv4 Subnet Explorer (hierarchical subdivision, visual preview)
 - Pure, unit-tested subnet math in `src/lib/subnet.ts`
 - Accessible UI and keyboard-friendly controls
+- One-click share links: copy a URL embedding the current explorer state (CIDR, mask, expanded, locked & names)
 
 ## Requirements
 
@@ -44,7 +45,8 @@ src/
 
 - Subnet explorer expands networks lazily; avoid expanding extremely deep from huge prefixes (e.g. /8 -> /30) all at once.
 - Host counts follow IPv4 norms; /31 and /32 receive special handling.
-- Planned: IPv6 support, variable-length aggregation tools, export (CSV/JSON), search/filter improvements.
+- Share links use a URL-safe base64 JSON blob in the `?subnets=` query param; opening such a link overwrites the current local state for that session.
+- Planned: IPv6 support, variable-length aggregation tools, richer search/filter.
 
 ## Contributing
 

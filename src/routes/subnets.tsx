@@ -58,6 +58,7 @@ export default function SubnetsPage() {
   onMount(() => {
     if (typeof window === 'undefined') return;
     try {
+      // Load baseline from localStorage
       const storedInput = localStorage.getItem(K_INPUT); if (storedInput) setInput(storedInput);
       const storedMask = localStorage.getItem(K_MAXMASK); if (storedMask) setMaxMask(parseInt(storedMask,10));
       const storedExpanded = localStorage.getItem(K_EXPANDED); if (storedExpanded) setExpanded(new Set(JSON.parse(storedExpanded) as string[]));
@@ -65,6 +66,33 @@ export default function SubnetsPage() {
       const storedNames = localStorage.getItem(K_NAMES); if (storedNames) {
         const obj = JSON.parse(storedNames) as Record<string,string>;
         setNames(new Map(Object.entries(obj)));
+      }
+
+      // Query param override (?subnets=...)
+      const url = new URL(window.location.href);
+      const qp = url.searchParams.get('subnets');
+      if (qp) {
+        let jsonText = '';
+        // Attempt URL-safe base64 decode first
+        try {
+          const b64 = qp.replace(/-/g,'+').replace(/_/g,'/');
+          jsonText = decodeURIComponent(escape(atob(b64)));
+        } catch {
+          // Fallback: treat as percent-encoded JSON
+          try { jsonText = decodeURIComponent(qp); } catch { jsonText = qp; }
+        }
+        try {
+          const data = JSON.parse(jsonText);
+          if (data && typeof data === 'object') {
+            if (data.input) setInput(data.input);
+            if (typeof data.maxMask === 'number') setMaxMask(data.maxMask);
+            if (Array.isArray(data.expanded)) setExpanded(new Set(data.expanded as string[]));
+            if (Array.isArray(data.locked)) setLocked(new Set(data.locked as string[]));
+            if (data.names && typeof data.names === 'object') setNames(new Map(Object.entries(data.names as Record<string,string>)));
+          }
+        } catch (err) {
+          console.warn('Invalid subnets share link data', err);
+        }
       }
     } catch (e) {
       // Ignore malformed persisted data
@@ -138,6 +166,37 @@ export default function SubnetsPage() {
   // Pre-parse locked subnets for descendant checks
   const lockedParsed = createMemo(() => Array.from(locked()).map(c => { try { return parseCIDR(c); } catch { return null; } }).filter(Boolean) as IPv4Subnet[]);
 
+  // Share button component (inline)
+  function ShareButton(props: { getState: () => any }) {
+    const [copied, setCopied] = createSignal(false);
+    async function doShare() {
+      try {
+        const state = props.getState();
+        const json = JSON.stringify(state);
+        const b64 = btoa(unescape(encodeURIComponent(json))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        const url = new URL(window.location.href);
+        url.searchParams.set('subnets', b64);
+        const shareUrl = url.toString();
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(()=>setCopied(false), 1800);
+        window.history.replaceState(null, '', shareUrl);
+      } catch (err) {
+        console.warn('Share failed, fallback plain encoding', err);
+        try {
+          const json = JSON.stringify(props.getState());
+          const url = new URL(window.location.href);
+          url.searchParams.set('subnets', encodeURIComponent(json));
+          const shareUrl = url.toString();
+          await navigator.clipboard.writeText(shareUrl);
+          setCopied(true);
+          setTimeout(()=>setCopied(false), 1800);
+        } catch {}
+      }
+    }
+    return <button type="button" onClick={doShare} class={`text-[11px] px-3 h-8 rounded border flex items-center gap-1 ${copied() ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700'}`} title={copied() ? 'Copied share link' : 'Copy shareable link to current state'}>{copied() ? 'Link Copied' : 'Share'}</button>;
+  }
+
   return (
     <main class="mx-auto max-w-6xl p-4 space-y-6">
       <header class="space-y-2">
@@ -153,6 +212,14 @@ export default function SubnetsPage() {
         </label>
         <p class="text-xs text-slate-600 dark:text-slate-500 leading-5 max-w-sm pt-5">Lock keeps a subnet visible even if its ancestors collapse. Name adds a custom label (click name icon). Split divides into two equal child subnets.</p>
         <div class="flex flex-wrap gap-2 pt-5">
+          <ShareButton getState={() => ({
+            version: 1,
+            input: input(),
+            maxMask: maxMask(),
+            expanded: Array.from(expanded()),
+            locked: Array.from(locked()),
+            names: Object.fromEntries(names())
+          })} />
           <button type="button" class="text-[11px] px-3 h-8 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={() => {
             const payload = {
               version: 1,
