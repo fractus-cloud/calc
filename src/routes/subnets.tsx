@@ -6,9 +6,14 @@ import { useLocation } from '@solidjs/router';
 import { safeParseCIDR, formatSubnet, IPv4Subnet, parseCIDR } from '~/lib/subnet';
 import { computeVisibleRows, ViewState } from '~/lib/subnetView';
 
-interface RowActionProps { rowSubnet: IPv4Subnet; depth: number; canSplit: boolean; canJoin: boolean; expanded: boolean; isSplit: boolean; onSplit: () => void; onExpand: () => void; onCollapse: () => void; onJoin: () => void; }
+interface RowActionProps { rowSubnet: IPv4Subnet; depth: number; canSplit: boolean; canJoin: boolean; expanded: boolean; isSplit: boolean; onSplit: () => void; onExpand: () => void; onCollapse: () => void; onJoin: () => void; uiForceJoin?: boolean; }
 
-function RowActions(p: RowActionProps) {
+// Helper exported for unit tests (pure logic for determining Join/Split label)
+export function logicalButtonLabel(isSplit: boolean, uiForceJoin?: boolean) {
+  return (isSplit || uiForceJoin) ? 'Join' : 'Split';
+}
+
+export function RowActions(p: RowActionProps) {
   // Two orthogonal concepts:
   // 1. Visual: expanded (shows children) vs collapsed (hides children) -> button toggles Expand/Collapse
   // 2. Logical: split (children have been materialized) vs joined (children forgotten) -> button toggles Split/Join
@@ -17,6 +22,9 @@ function RowActions(p: RowActionProps) {
   // Expand button should read Expand when currently collapsed, Collapse when expanded.
   // Logical button should read Split if eligible to create children (canSplit) and currently not expanded; once expanded it becomes Join.
   // We always render BOTH buttons (disabled when not applicable) to maintain layout consistency.
+  // We sometimes need to present a disabled Join button even when a subnet has not been logically split yet if a locked descendant exists.
+  // In that scenario expansion must remain disabled. We pass uiForceJoin to signal this case.
+  const logicalIsSplitForLabel = () => p.isSplit || p.uiForceJoin;
   return (
     <div class="flex gap-1 items-center">
       {/* Visual expand/collapse */}
@@ -25,15 +33,15 @@ function RowActions(p: RowActionProps) {
         disabled={!p.isSplit}
         class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.isSplit ? (isExpanded() ? 'btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700' : 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500') : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
         title={p.isSplit ? (isExpanded() ? 'Collapse (hide child subnets)' : 'Expand (show child subnets)') : 'Split first to enable expansion'}
-        aria-pressed={isExpanded() ? 'true' : 'false'}
+  // Removed aria-pressed due to linter issue with dynamic value; visual state conveyed via text label
       >{isExpanded() ? 'Collapse' : 'Expand'}</button>
       {/* Logical split/join */}
       <button
-        onClick={() => { p.isSplit ? p.onJoin() : p.onSplit(); }}
-        disabled={!p.canSplit || (p.isSplit && !p.canJoin)}
-        class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${(p.canSplit && (!p.isSplit || (p.isSplit && p.canJoin))) ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
-        title={!p.isSplit ? (p.canSplit ? 'Split (logically create child subnets)' : 'Cannot split further') : (p.canJoin ? 'Join (merge descendants back into single row)' : 'Cannot join: a locked descendant exists')}
-      >{p.isSplit ? 'Join' : 'Split'}</button>
+        onClick={() => { (p.isSplit || p.uiForceJoin) ? p.onJoin() : p.onSplit(); }}
+        disabled={!(logicalIsSplitForLabel() ? p.canJoin : p.canSplit)}
+        class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${((logicalIsSplitForLabel() && p.canJoin) || (!logicalIsSplitForLabel() && p.canSplit)) ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
+        title={logicalIsSplitForLabel() ? (p.canJoin ? 'Join (merge descendants back into single row)' : 'Cannot join: a locked descendant exists') : (p.canSplit ? 'Split (logically create child subnets)' : 'Cannot split further')}
+      >{logicalIsSplitForLabel() ? 'Join' : 'Split'}</button>
     </div>
   );
 }
@@ -402,7 +410,9 @@ export default function SubnetsPage() {
                             // Determine if any locked descendant exists (exclude self)
                             const hasLockedDesc = lockedParsed().some(ls => ls.cidr !== cidr && ls.mask > row.subnet.mask && ls.network >= row.subnet.network && ls.broadcast <= row.subnet.broadcast);
                             const isSplit = splitSet().has(cidr) || row.depth === 0; // root implicitly split
-                            return <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} canJoin={!hasLockedDesc} expanded={isExpanded} isSplit={isSplit} onSplit={() => splitSubnet(cidr)} onExpand={() => expandSubnet(cidr)} onCollapse={() => collapseSubnet(cidr)} onJoin={() => joinSubnet(cidr)} />;
+                            // If a locked descendant exists but this subnet hasn't been logically split, force a disabled Join label.
+                            const uiForceJoin = !isSplit && hasLockedDesc;
+                            return <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} canJoin={!hasLockedDesc} expanded={isExpanded} isSplit={isSplit} uiForceJoin={uiForceJoin} onSplit={() => splitSubnet(cidr)} onExpand={() => expandSubnet(cidr)} onCollapse={() => collapseSubnet(cidr)} onJoin={() => joinSubnet(cidr)} />;
                           })()}
                         </div>
                       </div>
