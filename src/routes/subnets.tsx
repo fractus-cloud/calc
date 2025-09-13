@@ -1,4 +1,7 @@
 import { createSignal, For, Show, createMemo, onMount, createEffect } from 'solid-js';
+import { shouldDeferSubnetCompute, estimatePotentialRowCount } from '~/lib/subnetHeuristic';
+
+// (heuristic helpers moved to lib/subnetHeuristic for testability)
 import { useLocation } from '@solidjs/router';
 import { safeParseCIDR, formatSubnet, IPv4Subnet, parseCIDR } from '~/lib/subnet';
 import { computeVisibleRows, ViewState } from '~/lib/subnetView';
@@ -178,11 +181,38 @@ export default function SubnetsPage() {
     }
   }
 
-  const visible = createMemo(() => {
+  // Loading & deferred computation for large tables
+  const [isComputing, setIsComputing] = createSignal(false);
+  const [visibleRows, setVisibleRows] = createSignal<ReturnType<typeof computeVisibleRows>>([]);
+  const [lastKey, setLastKey] = createSignal('');
+  // Heuristic threshold: if potential row count (2^(maxMask-rootMask)) exceeds 4096, we defer computation allowing spinner to paint.
+  createEffect(() => {
     const root = rootSubnet();
-    if (!root) return [];
-  const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
-    return computeVisibleRows({ root, state, targetMask: maxMask() });
+    if (!root) { setVisibleRows([]); return; }
+    const key = [root.cidr, maxMask(), Array.from(expanded()).length, Array.from(locked()).length, Array.from(names()).length].join('|');
+    if (key === lastKey()) return; // prevent redundant recompute in same tick
+    setLastKey(key);
+  const potential = estimatePotentialRowCount(root.mask, maxMask());
+  const defer = shouldDeferSubnetCompute(root.mask, maxMask());
+    if (defer) {
+      setIsComputing(true);
+      // Use requestIdleCallback if available, else fallback to setTimeout
+      const run = () => {
+        const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
+        const rows = computeVisibleRows({ root, state, targetMask: maxMask() });
+        setVisibleRows(rows);
+        setIsComputing(false);
+      };
+      if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
+        (window as any).requestIdleCallback(run, { timeout: 500 });
+      } else {
+        setTimeout(run, 0);
+      }
+    } else {
+      const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
+      setVisibleRows(computeVisibleRows({ root, state, targetMask: maxMask() }));
+      setIsComputing(false);
+    }
   });
   // Pre-parse locked subnets for descendant checks
   const lockedParsed = createMemo(() => Array.from(locked()).map(c => { try { return parseCIDR(c); } catch { return null; } }).filter(Boolean) as IPv4Subnet[]);
@@ -338,7 +368,13 @@ export default function SubnetsPage() {
               </tr>
             </thead>
             <tbody class="bg-slate-50 dark:bg-slate-900/40">
-              <For each={visible()}>{row => {
+              <Show when={!isComputing()} fallback={<tr><td colSpan={4} class="py-10">
+                <div class="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
+                  <div class="w-8 h-8 border-3 border-sky-500/40 border-t-sky-600 rounded-full animate-spin" />
+                  <span class="text-xs font-medium tracking-wide">Computing subnet view…</span>
+                </div>
+              </td></tr>}>
+              <For each={visibleRows()}>{row => {
                 const f = formatSubnet(row.subnet);
                 const range = `${f.network} – ${f.broadcast}`;
                 const cidr = row.subnet.cidr;
@@ -413,6 +449,7 @@ export default function SubnetsPage() {
                   </tr>
                 );
               }}</For>
+              </Show>
             </tbody>
           </table>
         </div>

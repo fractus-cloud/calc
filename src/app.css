@@ -127,3 +127,8 @@ body {
 .dl-31 { left: 372px; }
 .dl-32 { left: 384px; }
 
+/* Spinner utilities (in case Tailwind config is minimal) */
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 0.9s linear infinite; }
+.border-3 { border-width: 3px; }
+
