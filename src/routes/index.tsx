@@ -18,8 +18,8 @@ export default function Home() {
               <A href="/subnets" class="px-5 py-2.5 rounded-md bg-sky-600 hover:bg-sky-500 text-sm font-medium text-white shadow inline-flex items-center gap-2">
                 Open Subnet Explorer →
               </A>
-              <A href="/subnets?cidr=10.0.0.0/16&mask=24" class="px-4 py-2.5 rounded-md bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-sm font-medium text-slate-800 dark:text-slate-200 inline-flex items-center">
-                Try sample /16
+              <A href="/subnets?subnets=eyJ2ZXJzaW9uIjoxLCJpbnB1dCI6IjEwLjEwLjAuMC8yMCIsIm1heE1hc2siOjI2LCJleHBhbmRlZCI6WyIxMC4xMC4wLjAvMjAiLCIxMC4xMC4wLjAvMjEiLCIxMC4xMC44LjAvMjEiLCIxMC4xMC4wLjAvMjIiLCIxMC4xMC4wLjAvMjMiLCIxMC4xMC4yLjAvMjMiXSwibG9ja2VkIjpbIjEwLjEwLjAuMC8yMCIsIjEwLjEwLjAuMC8yMiIsIjEwLjEwLjAuMC8yMyIsIjEwLjEwLjIuMC8yMyIsIjEwLjEwLjAuMC8yNCIsIjEwLjEwLjEuMC8yNCIsIjEwLjEwLjIuMC8yNCIsIjEwLjEwLjMuMC8yNCJdLCJuYW1lcyI6eyIxMC4xMC4wLjAvMjAiOiJDb3JwIC8yMCIsIjEwLjEwLjAuMC8yMSI6IlByaW1hcnkgU2VnbWVudCIsIjEwLjEwLjguMC8yMSI6IlNlY29uZGFyeSBTZWdtZW50IiwiMTAuMTAuMC4wLzIyIjoiQ29yZSAmIERNWiIsIjEwLjEwLjAuMC8yMyI6IkNvcmUiLCIxMC4xMC4yLjAvMjMiOiJETVoiLCIxMC4xMC4wLjAvMjQiOiJBcHAgQSIsIjEwLjEwLjEuMC8yNCI6IkFwcCBCIiwiMTAuMTAuMi4wLzI0IjoiREIiLCIxMC4xMC4zLjAvMjQiOiJNb25pdG9yaW5nIn19" class="px-4 py-2.5 rounded-md bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-sm font-medium text-slate-800 dark:text-slate-200 inline-flex items-center">
+                Complex demo plan
               </A>
             </div>
           </div>
