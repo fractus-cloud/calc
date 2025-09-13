@@ -261,7 +261,7 @@ export default function SubnetsPage() {
         <label class="flex flex-col text-sm font-medium text-primary gap-1">Max mask
           <input type="number" min={0} max={32} value={maxMask()} onInput={e => setMaxMask(e.currentTarget.valueAsNumber)} class="font-mono w-28" />
         </label>
-        <p class="text-xs text-slate-600 dark:text-slate-500 leading-5 max-w-sm pt-5">Lock keeps a subnet visible even if its ancestors collapse. Name adds a custom label (click name icon). Split divides into two equal child subnets.</p>
+  <div class="hidden md:block flex-grow" aria-hidden="true" />
         <div class="flex flex-wrap gap-2 pt-5">
           <ShareButton getState={() => ({
             version: 1,
