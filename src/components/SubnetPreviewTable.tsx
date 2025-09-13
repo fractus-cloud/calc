@@ -24,7 +24,10 @@ export function SubnetPreviewTable(): JSX.Element {
           {rows.map(r => (
             <tr class="border-t border-slate-700/40" aria-hidden>
               <td class={`pr-2 py-1 ${indent(r.depth)}`}>
-                <button disabled class="text-[10px] rounded-md px-2 h-6 flex items-center border border-slate-600/60 bg-slate-800 text-slate-500 cursor-default">{r.depth < 3 ? 'Collapse' : 'Split'}</button>
+                <div class="flex gap-1">
+                  <button disabled class="text-[10px] rounded-md px-2 h-6 flex items-center border border-slate-600/60 bg-slate-800 text-slate-500 cursor-default">{r.depth < 3 ? 'Collapse' : 'Expand'}</button>
+                  <button disabled class="text-[10px] rounded-md px-2 h-6 flex items-center border border-slate-600/60 bg-slate-800 text-slate-500 cursor-default">{r.depth < 3 ? 'Join' : 'Split'}</button>
+                </div>
               </td>
               <td class="py-1 font-mono">
                 <div class="flex items-center gap-2">

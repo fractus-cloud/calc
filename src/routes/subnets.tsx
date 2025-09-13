@@ -3,35 +3,34 @@ import { useLocation } from '@solidjs/router';
 import { safeParseCIDR, formatSubnet, IPv4Subnet, parseCIDR } from '~/lib/subnet';
 import { computeVisibleRows, ViewState } from '~/lib/subnetView';
 
-interface RowActionProps { rowSubnet: IPv4Subnet; depth: number; canSplit: boolean; canJoin: boolean; expanded: boolean; onSplit: () => void; onCollapse: () => void; onJoin: () => void; }
+interface RowActionProps { rowSubnet: IPv4Subnet; depth: number; canSplit: boolean; canJoin: boolean; expanded: boolean; isSplit: boolean; onSplit: () => void; onExpand: () => void; onCollapse: () => void; onJoin: () => void; }
 
 function RowActions(p: RowActionProps) {
-  // When not expanded yet: show Split button. Once expanded: show Collapse + Join.
+  // Two orthogonal concepts:
+  // 1. Visual: expanded (shows children) vs collapsed (hides children) -> button toggles Expand/Collapse
+  // 2. Logical: split (children have been materialized) vs joined (children forgotten) -> button toggles Split/Join
+  // We now track split state separately (p.isSplit). Expand only meaningful when a subnet is already split.
+  const isExpanded = () => p.expanded; // visual state passed in
+  // Expand button should read Expand when currently collapsed, Collapse when expanded.
+  // Logical button should read Split if eligible to create children (canSplit) and currently not expanded; once expanded it becomes Join.
+  // We always render BOTH buttons (disabled when not applicable) to maintain layout consistency.
   return (
     <div class="flex gap-1 items-center">
-      <Show when={p.expanded} fallback={
-        <button
-          disabled={!p.canSplit}
-          onClick={p.onSplit}
-          class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.canSplit ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
-          title={p.canSplit ? 'Split into two subnets' : 'Cannot split further'}
-        >Split</button>
-      }>
-        <div class="flex gap-1">
-          <button
-            onClick={p.onCollapse}
-            disabled={!p.canSplit}
-            class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.canSplit ? 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
-            title="Collapse (temporarily hide descendants)"
-          >Collapse</button>
-          <button
-            onClick={p.onJoin}
-            disabled={!p.canSplit || !p.canJoin}
-            class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${(p.canSplit && p.canJoin) ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
-            title={p.canJoin ? 'Join (merge descendants into this single row)' : 'Cannot join: a locked descendant exists'}
-          >Join</button>
-        </div>
-      </Show>
+      {/* Visual expand/collapse */}
+      <button
+        onClick={() => { isExpanded() ? p.onCollapse() : p.onExpand(); }}
+        disabled={!p.isSplit}
+        class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.isSplit ? (isExpanded() ? 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700' : 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500') : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
+        title={p.isSplit ? (isExpanded() ? 'Collapse (hide child subnets)' : 'Expand (show child subnets)') : 'Split first to enable expansion'}
+        aria-pressed={isExpanded() ? 'true' : 'false'}
+      >{isExpanded() ? 'Collapse' : 'Expand'}</button>
+      {/* Logical split/join */}
+      <button
+        onClick={() => { p.isSplit ? p.onJoin() : p.onSplit(); }}
+        disabled={!p.canSplit || (p.isSplit && !p.canJoin)}
+        class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${(p.canSplit && (!p.isSplit || (p.isSplit && p.canJoin))) ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500' : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
+        title={!p.isSplit ? (p.canSplit ? 'Split (logically create child subnets)' : 'Cannot split further') : (p.canJoin ? 'Join (merge descendants back into single row)' : 'Cannot join: a locked descendant exists')}
+      >{p.isSplit ? 'Join' : 'Split'}</button>
     </div>
   );
 }
@@ -46,6 +45,8 @@ export default function SubnetsPage() {
   // Reactive view state
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [locked, setLocked] = createSignal<Set<string>>(new Set());
+  // Track which subnets have been logically split (child subnets materialized). Root considered split implicitly.
+  const [splitSet, setSplitSet] = createSignal<Set<string>>(new Set());
   const [names, setNames] = createSignal<Map<string,string>>(new Map());
 
   // Local storage persistence keys
@@ -54,6 +55,7 @@ export default function SubnetsPage() {
   const K_MAXMASK = LS_PREFIX + 'maxMask';
   const K_EXPANDED = LS_PREFIX + 'expanded';
   const K_LOCKED = LS_PREFIX + 'locked';
+  const K_SPLIT = LS_PREFIX + 'split';
   const K_NAMES = LS_PREFIX + 'names';
 
   const location = useLocation();
@@ -66,7 +68,8 @@ export default function SubnetsPage() {
       const storedInput = localStorage.getItem(K_INPUT); if (storedInput) setInput(storedInput);
       const storedMask = localStorage.getItem(K_MAXMASK); if (storedMask) setMaxMask(parseInt(storedMask,10));
       const storedExpanded = localStorage.getItem(K_EXPANDED); if (storedExpanded) setExpanded(new Set(JSON.parse(storedExpanded) as string[]));
-      const storedLocked = localStorage.getItem(K_LOCKED); if (storedLocked) setLocked(new Set(JSON.parse(storedLocked) as string[]));
+  const storedLocked = localStorage.getItem(K_LOCKED); if (storedLocked) setLocked(new Set(JSON.parse(storedLocked) as string[]));
+  const storedSplit = localStorage.getItem(K_SPLIT); if (storedSplit) setSplitSet(new Set(JSON.parse(storedSplit) as string[]));
       const storedNames = localStorage.getItem(K_NAMES); if (storedNames) {
         const obj = JSON.parse(storedNames) as Record<string,string>;
         setNames(new Map(Object.entries(obj)));
@@ -115,6 +118,7 @@ export default function SubnetsPage() {
   createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_MAXMASK, String(maxMask())); } catch {} } });
   createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_EXPANDED, JSON.stringify(Array.from(expanded()))); } catch {} } });
   createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_LOCKED, JSON.stringify(Array.from(locked()))); } catch {} } });
+  createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_SPLIT, JSON.stringify(Array.from(splitSet()))); } catch {} } });
   createEffect(() => { if (typeof window !== 'undefined') { try { localStorage.setItem(K_NAMES, JSON.stringify(Object.fromEntries(names()))); } catch {} } });
 
   // Expand (split)
@@ -146,6 +150,13 @@ export default function SubnetsPage() {
       }
       return next;
     });
+    // Remove split flag for this subnet (logical join)
+    setSplitSet(prev => { const next = new Set(prev); next.delete(cidr); return next; });
+  }
+  function splitSubnet(cidr: string) {
+    // Mark as split and expand visually right away
+    setSplitSet(prev => { const next = new Set(prev); next.add(cidr); return next; });
+    expandSubnet(cidr);
   }
   function toggleLock(cidr: string) {
     setLocked(prev => { const next = new Set(prev); if (next.has(cidr)) next.delete(cidr); else next.add(cidr); return next; });
@@ -170,7 +181,7 @@ export default function SubnetsPage() {
   const visible = createMemo(() => {
     const root = rootSubnet();
     if (!root) return [];
-    const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
+  const state: ViewState = { expanded: expanded(), locked: locked(), names: names(), maxDepth: maxMask() } as any;
     return computeVisibleRows({ root, state, targetMask: maxMask() });
   });
   // Pre-parse locked subnets for descendant checks
@@ -354,7 +365,8 @@ export default function SubnetsPage() {
                           {(() => {
                             // Determine if any locked descendant exists (exclude self)
                             const hasLockedDesc = lockedParsed().some(ls => ls.cidr !== cidr && ls.mask > row.subnet.mask && ls.network >= row.subnet.network && ls.broadcast <= row.subnet.broadcast);
-                            return <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} canJoin={!hasLockedDesc} expanded={isExpanded} onSplit={() => expandSubnet(cidr)} onCollapse={() => collapseSubnet(cidr)} onJoin={() => joinSubnet(cidr)} />;
+                            const isSplit = splitSet().has(cidr) || row.depth === 0; // root implicitly split
+                            return <RowActions rowSubnet={row.subnet} depth={row.depth} canSplit={canSplit} canJoin={!hasLockedDesc} expanded={isExpanded} isSplit={isSplit} onSplit={() => splitSubnet(cidr)} onExpand={() => expandSubnet(cidr)} onCollapse={() => collapseSubnet(cidr)} onJoin={() => joinSubnet(cidr)} />;
                           })()}
                         </div>
                       </div>
