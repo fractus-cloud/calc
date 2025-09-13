@@ -41,13 +41,6 @@ src/
   components/          # Small UI pieces (Nav, tables, viz)
 ```
 
-## Notes & Roadmap
-
-- Subnet explorer expands networks lazily; avoid expanding extremely deep from huge prefixes (e.g. /8 -> /30) all at once.
-- Host counts follow IPv4 norms; /31 and /32 receive special handling.
-- Share links use a URL-safe base64 JSON blob in the `?subnets=` query param; opening such a link overwrites the current local state for that session.
-- Planned: IPv6 support, variable-length aggregation tools, richer search/filter.
-
 ## Contributing
 
 Contributions welcome. Open issues or PRs and include tests for new subnet logic. Use conventional commits and ensure CI (lint / typecheck / test / build) stays green.
