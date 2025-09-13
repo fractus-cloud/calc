@@ -31,3 +31,7 @@ Thumbs.db
 !.dev.vars.example
 .env*
 !.env.example
+
+/test-results
+/.playwright-mcp
+/playwright-report
