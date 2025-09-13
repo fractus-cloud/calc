@@ -1,4 +1,5 @@
 import { createSignal, For, Show, createMemo, onMount, createEffect } from 'solid-js';
+import { useLocation } from '@solidjs/router';
 import { safeParseCIDR, formatSubnet, IPv4Subnet, parseCIDR } from '~/lib/subnet';
 import { computeVisibleRows, ViewState } from '~/lib/subnetView';
 
@@ -55,6 +56,9 @@ export default function SubnetsPage() {
   const K_LOCKED = LS_PREFIX + 'locked';
   const K_NAMES = LS_PREFIX + 'names';
 
+  const location = useLocation();
+  const [shareApplied, setShareApplied] = createSignal<string | null>(null);
+
   onMount(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -68,35 +72,41 @@ export default function SubnetsPage() {
         setNames(new Map(Object.entries(obj)));
       }
 
-      // Query param override (?subnets=...)
-      const url = new URL(window.location.href);
-      const qp = url.searchParams.get('subnets');
-      if (qp) {
-        let jsonText = '';
-        // Attempt URL-safe base64 decode first
-        try {
-          const b64 = qp.replace(/-/g,'+').replace(/_/g,'/');
-          jsonText = decodeURIComponent(escape(atob(b64)));
-        } catch {
-          // Fallback: treat as percent-encoded JSON
-          try { jsonText = decodeURIComponent(qp); } catch { jsonText = qp; }
-        }
-        try {
-          const data = JSON.parse(jsonText);
-          if (data && typeof data === 'object') {
-            if (data.input) setInput(data.input);
-            if (typeof data.maxMask === 'number') setMaxMask(data.maxMask);
-            if (Array.isArray(data.expanded)) setExpanded(new Set(data.expanded as string[]));
-            if (Array.isArray(data.locked)) setLocked(new Set(data.locked as string[]));
-            if (data.names && typeof data.names === 'object') setNames(new Map(Object.entries(data.names as Record<string,string>)));
-          }
-        } catch (err) {
-          console.warn('Invalid subnets share link data', err);
-        }
-      }
+      // Initial query param application will happen in reactive effect below
     } catch (e) {
       // Ignore malformed persisted data
       console.warn('Failed to load persisted subnet state', e);
+    }
+  });
+
+  // Reactively watch the location.search for a ?subnets= param and apply once per value
+  createEffect(() => {
+    if (typeof window === 'undefined') return;
+    const search = location.search; // triggers effect when router updates
+    const url = new URL(window.location.origin + location.pathname + search + location.hash);
+    const qp = url.searchParams.get('subnets');
+    if (!qp) return;
+    // Avoid re-applying if we've already applied this exact payload
+  if (shareApplied() === qp) return; // already applied this payload
+    let jsonText = '';
+    try {
+      const b64 = qp.replace(/-/g,'+').replace(/_/g,'/');
+      jsonText = decodeURIComponent(escape(atob(b64)));
+    } catch {
+      try { jsonText = decodeURIComponent(qp); } catch { jsonText = qp; }
+    }
+    try {
+      const data = JSON.parse(jsonText);
+      if (data && typeof data === 'object') {
+        if (data.input) setInput(data.input);
+        if (typeof data.maxMask === 'number') setMaxMask(data.maxMask);
+        if (Array.isArray(data.expanded)) setExpanded(new Set(data.expanded as string[]));
+        if (Array.isArray(data.locked)) setLocked(new Set(data.locked as string[]));
+        if (data.names && typeof data.names === 'object') setNames(new Map(Object.entries(data.names as Record<string,string>)));
+  setShareApplied(qp);
+      }
+    } catch (err) {
+      console.warn('Invalid subnets share link data (reactive)', err);
     }
   });
 
