@@ -8,7 +8,9 @@ export default createHandler(() => (
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <link rel="icon" href="/favicon.ico" />
+          <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+          <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+          <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
           {assets}
         </head>
         <body>
