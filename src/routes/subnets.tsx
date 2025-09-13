@@ -23,7 +23,7 @@ function RowActions(p: RowActionProps) {
       <button
         onClick={() => { isExpanded() ? p.onCollapse() : p.onExpand(); }}
         disabled={!p.isSplit}
-        class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.isSplit ? (isExpanded() ? 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700' : 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500') : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
+        class={`text-[10px] rounded-md px-2 h-7 flex items-center border whitespace-nowrap ${p.isSplit ? (isExpanded() ? 'btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700' : 'bg-sky-600 text-white border-sky-600 hover:bg-sky-500') : 'opacity-30 cursor-not-allowed border-slate-300 dark:border-slate-600'}`}
         title={p.isSplit ? (isExpanded() ? 'Collapse (hide child subnets)' : 'Expand (show child subnets)') : 'Split first to enable expansion'}
         aria-pressed={isExpanded() ? 'true' : 'false'}
       >{isExpanded() ? 'Collapse' : 'Expand'}</button>
@@ -245,7 +245,7 @@ export default function SubnetsPage() {
         } catch {}
       }
     }
-    return <button type="button" onClick={doShare} class={`text-[11px] px-3 h-8 rounded border flex items-center gap-1 ${copied() ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-200 dark:bg-slate-800 border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700'}`} title={copied() ? 'Copied share link' : 'Copy shareable link to current state'}>{copied() ? 'Link Copied' : 'Share'}</button>;
+    return <button type="button" onClick={doShare} class={`text-[11px] px-3 h-8 rounded border flex items-center gap-1 ${copied() ? 'bg-emerald-600 text-white border-emerald-600' : 'btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:hover:bg-slate-700'}`} title={copied() ? 'Copied share link' : 'Copy shareable link to current state'}>{copied() ? 'Link Copied' : 'Share'}</button>;
   }
 
   return (
@@ -254,12 +254,12 @@ export default function SubnetsPage() {
         <h1 class="text-3xl font-light tracking-tight"><span class="text-sky-500 font-semibold">IPv4</span> Subnet Explorer</h1>
         <p class="text-sm text-slate-500 dark:text-slate-400 max-w-prose">Explore hierarchical subnetting. Split, name & lock notable networks for planning.</p>
       </header>
-      <form class="flex flex-col md:flex-row gap-4 items-start md:items-end bg-slate-100 dark:bg-slate-900/40 p-5 rounded-lg border border-slate-300 dark:border-slate-700/50" onSubmit={e => e.preventDefault()}>
-        <label class="flex flex-col text-sm font-medium text-slate-700 dark:text-slate-300 gap-1">CIDR
-          <input value={input()} onInput={e => setInput(e.currentTarget.value)} class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-600 rounded px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-600 min-w-[12rem]" placeholder="10.0.0.0/8" />
+      <form class="flex flex-col md:flex-row gap-4 items-start md:items-end card p-5" onSubmit={e => e.preventDefault()}>
+        <label class="flex flex-col text-sm font-medium text-primary gap-1">CIDR
+          <input type="text" value={input()} onInput={e => setInput(e.currentTarget.value)} class="font-mono min-w-[12rem]" placeholder="10.0.0.0/8" />
         </label>
-        <label class="flex flex-col text-sm font-medium text-slate-700 dark:text-slate-300 gap-1">Max mask
-          <input type="number" min={0} max={32} value={maxMask()} onInput={e => setMaxMask(e.currentTarget.valueAsNumber)} class="bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-600 rounded px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-sky-600 w-28" />
+        <label class="flex flex-col text-sm font-medium text-primary gap-1">Max mask
+          <input type="number" min={0} max={32} value={maxMask()} onInput={e => setMaxMask(e.currentTarget.valueAsNumber)} class="font-mono w-28" />
         </label>
         <p class="text-xs text-slate-600 dark:text-slate-500 leading-5 max-w-sm pt-5">Lock keeps a subnet visible even if its ancestors collapse. Name adds a custom label (click name icon). Split divides into two equal child subnets.</p>
         <div class="flex flex-wrap gap-2 pt-5">
@@ -271,7 +271,7 @@ export default function SubnetsPage() {
             locked: Array.from(locked()),
             names: Object.fromEntries(names())
           })} />
-          <button type="button" class="text-[11px] px-3 h-8 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={() => {
+          <button type="button" class="text-[11px] px-3 h-8 rounded btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:hover:bg-slate-700" onClick={() => {
             const payload = {
               version: 1,
               input: input(),
@@ -287,7 +287,7 @@ export default function SubnetsPage() {
             a.click();
             URL.revokeObjectURL(a.href);
           }}>Export JSON</button>
-          <button type="button" class="text-[11px] px-3 h-8 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={() => {
+          <button type="button" class="text-[11px] px-3 h-8 rounded btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:hover:bg-slate-700" onClick={() => {
             // CSV: cidr,name,locked,expanded (include union of named, locked, expanded, plus root)
             const rows: string[] = ['cidr,name,locked,expanded'];
             const set = new Set<string>();
@@ -311,7 +311,7 @@ export default function SubnetsPage() {
             a.click();
             URL.revokeObjectURL(a.href);
           }}>Export CSV</button>
-          <label class="text-[11px] px-3 h-8 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700 flex items-center cursor-pointer">Import
+          <label class="text-[11px] px-3 h-8 rounded btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:hover:bg-slate-700 flex items-center cursor-pointer">Import
             <input type="file" accept=".json,.csv,application/json,text/csv" class="hidden" onChange={e => {
               const file = e.currentTarget.files?.[0];
               if (!file) return;
@@ -357,9 +357,9 @@ export default function SubnetsPage() {
         </div>
       </form>
       <Show when={parsed().ok} fallback={<p class="text-rose-500 font-mono">Error: {errorMsg()}</p>}>
-        <div class="overflow-x-auto rounded-md border border-slate-300 dark:border-slate-700/50">
+        <div class="overflow-x-auto rounded-md table-container">
           <table class="w-full text-sm">
-            <thead class="bg-slate-200 dark:bg-slate-800/70 text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-400">
+            <thead class="table-gradient-header table-header-text text-[11px] uppercase tracking-wide">
               <tr>
                 <th class="text-left pl-2 py-2 font-medium w-[1%]">Actions</th>
                 <th class="text-left py-2 font-medium">CIDR / Name / Lock</th>
@@ -367,7 +367,7 @@ export default function SubnetsPage() {
                 <th class="text-right py-2 pr-3 font-medium">Usable Hosts</th>
               </tr>
             </thead>
-            <tbody class="bg-slate-50 dark:bg-slate-900/40">
+            <tbody class="table-body-bg">
               <Show when={!isComputing()} fallback={<tr><td colSpan={4} class="py-10">
                 <div class="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
                   <div class="w-8 h-8 border-3 border-sky-500/40 border-t-sky-600 rounded-full animate-spin" />
@@ -387,7 +387,7 @@ export default function SubnetsPage() {
                 let inputRef: HTMLInputElement | undefined;
                 function saveName() { if (inputRef) { setName(cidr, inputRef.value.trim()); setEditing(false); } }
                 return (
-                  <tr class="border-b border-slate-200 dark:border-slate-700/30" data-depth={row.depth}>
+                  <tr class="table-row-border" data-depth={row.depth}>
                     <td class="align-middle pr-2">
                       <div class="relative depth-wrapper" data-depth={row.depth}>
                         <div class="depth-lines" aria-hidden="true">
@@ -412,17 +412,17 @@ export default function SubnetsPage() {
                         <span class="font-semibold text-sky-500 dark:text-sky-400 select-none">{cidr}</span>
                         <Show when={!editing()} fallback={
                           <form onSubmit={(e)=>{e.preventDefault(); saveName();}} class="flex items-center gap-1">
-                            <input ref={el=>inputRef=el} value={name||''} autofocus placeholder="Name" class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-xs" />
+                            <input ref={el=>inputRef=el} value={name||''} autofocus placeholder="Name" class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-xs" />
                             <button type="submit" class="text-[10px] px-2 h-6 rounded bg-sky-600 text-white">Save</button>
                             <button type="button" onClick={()=>{setEditing(false);}} class="text-[10px] px-2 h-6 rounded bg-slate-400 dark:bg-slate-600 text-white">X</button>
                           </form>
                         }>
                           <span class="text-xs text-amber-500 font-medium">{name}</span>
-                          <button class="text-[10px] px-2 h-6 rounded bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-700" onClick={()=> setEditing(true)} aria-label="Edit name" title={name ? 'Rename subnet' : 'Add name to subnet'}>{name? 'Rename':'Name'}</button>
+                          <button class="text-[10px] px-2 h-6 rounded btn-secondary hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-600 dark:hover:bg-slate-700" onClick={()=> setEditing(true)} aria-label="Edit name" title={name ? 'Rename subnet' : 'Add name to subnet'}>{name? 'Rename':'Name'}</button>
                         </Show>
                         <button
                           onClick={() => toggleLock(cidr)}
-                          class={`group w-7 h-7 flex items-center justify-center rounded-md border transition-colors ${isLocked ? 'border-amber-500 bg-amber-500/20 hover:bg-amber-500/30' : 'border-transparent hover:bg-slate-200 dark:hover:bg-slate-800'}`}
+                          class={`group w-7 h-7 flex items-center justify-center rounded-md border transition-colors ${isLocked ? 'border-amber-500 bg-amber-500/20 hover:bg-amber-500/30' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                           aria-label={isLocked ? 'Unlock subnet' : 'Lock subnet'}
                           title={isLocked ? 'Unlock subnet' : 'Lock subnet'}
                           data-pressed={isLocked ? 'true' : 'false'}
