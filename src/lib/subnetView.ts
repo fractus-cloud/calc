@@ -5,6 +5,8 @@ export interface VisibleRow {
   depth: number;
   locked: boolean;
   name?: string;
+  // Boolean per ancestor depth index (0..depth-1) indicating that ancestor subnet at that depth is locked.
+  lockedAncestors: boolean[];
 }
 
 export interface ViewState {
@@ -35,17 +37,18 @@ export function computeVisibleRows(opts: ComputeOptions): VisibleRow[] {
 
   // We'll traverse a dynamic frontier. For locked nodes we need to guarantee path visibility; if a locked node's ancestor isn't expanded, we still surface the locked node directly under the closest visible ancestor with computed depth (depth of ancestor +1 for display), indicating it's isolated.
 
-  function walk(current: IPv4Subnet, depth: number) {
-    rows.push({ subnet: current, depth, locked: state.locked.has(current.cidr), name: state.names.get(current.cidr) });
+  function walk(current: IPv4Subnet, depth: number, lockedAncestors: boolean[]) {
+    rows.push({ subnet: current, depth, locked: state.locked.has(current.cidr), name: state.names.get(current.cidr), lockedAncestors });
     const isExpanded = state.expanded.has(current.cidr);
     if (!isExpanded) return;
     for (const child of getChildren(current)) {
       byCidr.set(child.cidr, child);
-      walk(child, depth + 1);
+      const childLockedAncestors = lockedAncestors.concat(state.locked.has(current.cidr));
+      walk(child, depth + 1, childLockedAncestors);
     }
   }
 
-  walk(root, 0);
+  walk(root, 0, []);
 
   // Post-process to ensure locked nodes present.
   // Generate potential descendants up to maxDepth for any locked node not present because its ancestors weren't expanded.
@@ -74,7 +77,9 @@ export function computeVisibleRows(opts: ComputeOptions): VisibleRow[] {
       let depth = 1;
       // naive: keep depth relative to mask difference: depth = found.mask - root.mask
       depth = found.mask - root.mask;
-      rows.push({ subnet: found, depth, locked: true, name: state.names.get(found.cidr) });
+  // For synthetic locked visibility (ancestor chain collapsed) we approximate ancestor lock info by mask difference
+  const lockedAncestors: boolean[] = new Array(depth).fill(false);
+  rows.push({ subnet: found, depth, locked: true, name: state.names.get(found.cidr), lockedAncestors });
     }
   }
 

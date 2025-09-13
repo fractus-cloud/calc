@@ -51,6 +51,8 @@ body {
 .depth-wrapper[data-depth] { --depth: attr(data-depth integer); }
 .depth-lines { position: absolute; inset: 0; pointer-events: none; }
 .depth-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(var(--border)/0.35); }
+/* Highlight when ancestor subnet is locked */
+.depth-line-locked { background: rgb(245 158 11 / 0.9); box-shadow: 0 0 0 1px rgb(245 158 11 / 0.5); }
 /* Simpler: rely on inline style removed, so generate left via utility classes if needed later */
 
 /* Generated utility classes (12px = 0.75rem step) */

@@ -268,7 +268,9 @@ export default function SubnetsPage() {
                       <div class="relative depth-wrapper" data-depth={row.depth}>
                         <div class="depth-lines" aria-hidden="true">
                           <For each={[...Array(row.depth).keys()]}>{i => {
-                            const cls = `dl-${i}`; return <span class={`depth-line ${cls}`} data-i={i} />; }}
+                            const cls = `dl-${i}`;
+                            const lockedSeg = row.lockedAncestors?.[i] ? 'depth-line-locked' : '';
+                            return <span class={`depth-line ${cls} ${lockedSeg}`} data-i={i} />; }}
                           </For>
                         </div>
                         <div class={`relative z-10 ${`depth-pad-${row.depth <= 32 ? row.depth : 32}`}`}>
